@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang = "en">
+<head>
+
+    <meta charset="UTF-8"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    <title>Recommendations</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-link:hover {
+            color: orange !important; /* Change text color on hover */
+        }
+        .nav-link.btn {
+            border-radius: 5px; /* Add rounded corners to buttons */
+        }
+        /* Additional styles for modal */
+        .modal-body {
+            text-align: center;
+        }
+        .modal-content {
+            background-color: #fff; /* Set modal content background color */
+            color: #000; /* Set modal content text color */
+        }
+        .modal-content.dark {
+            background-color: #000; /* Set modal content background color for dark theme */
+            color: #fff; /* Set modal content text color for dark theme */
+        }
+
+        .book-card {
+            flex: 1 1 calc(20% - 20px);
+            margin: 10px;
+            max-width: calc(20% - 20px);
+        }
+
+        .row-custom {
+            display: flex;
+            flex-wrap: wrap;
+            margin-left: -10px;
+            margin-right: -10px;
+        }
+
+        .card-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2; /* number of lines to show */
+            -webkit-box-orient: vertical;
+        }
+
+        /* Adjusted styles for selected book */
+        .selected-book img {
+            max-width: 100%;
+            height: auto;
+        }
+        .selected-book .book-details {
+            padding-left: 20px;
+        }
+
+        .book-cover {
+            height: 250px;
+            object-fit: cover;
+        }
+        .book-body {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .card-body .btn-block {
+            margin-top: auto;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <a class="navbar-brand mx-auto" href="#">RECO - Book Recommendation System</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+      <ul class="navbar-nav">
+        <li class="nav-item active">
+          <a class="nav-link" href="index"><i class="fas fa-home"></i> Home</a>
+        </li>
+  
+        <li class="nav-item">
+          <a class="nav-link" href="#" id="settingsLink"><i class="fas fa-cog"></i> Settings</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+  
+  
+<!-- Search Bar with Book Dropdown -->
+<div class="container mt-5">
+    <h4>Select a book for get the similar books</h4>
+    <form action="/recommendations" method="POST" style="display:flex;">
+        <select class="form-control mr-2" name="prod">
+            {% for book in books %}
+                <option value="{{ book }}" {% if book == selected_bookTitle %}selected{% endif %}>{{ book }}</option>
+            {% endfor %}
+        </select>
+        <input type="number" class="form-control" name="nbr" placeholder="Number of products..." style="width:100px;">
+        <button class="btn btn-primary">Search</button>
+    </form>
+</div>
+
+<!-- User Selection Dropdown -->
+<div class="container mt-5">
+    <h4>Select User to See Recommendations</h4>
+    <form action="/recommendations" method="POST" class="mb-3">
+        <div class="form-group">
+            <label for="userName">Select User:</label>
+            <select class="form-control" id="userName" name="userName">
+                {% for user in users %}
+                    <option value="{{ user['userName'] }}" {% if user['userName'] == selected_userName %}selected{% endif %}>{{ user['userName'] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Select User</button>
+    </form>
+</div>
+
+<!-- Display User Details -->
+{% if user_details %}
+<div class="container mt-4">
+    <h5>User Details</h5>
+    <p><strong>User ID:</strong> {{ user_details['userID'] }}</p>
+    <p><strong>User Name:</strong> {{ user_details['userName'] }}</p>
+    <p><strong>Rated Books Count:</strong> {{ user_details['rated_books_count'] }}</p>
+</div>
+{% endif %}
+
+<!-- Display Selected Book Details -->
+{% if selected_book %}
+<div class="container mt-4">
+    <h5>Selected Book</h5>
+    <div class="row selected-book">
+        <div class="col-md-4">
+            <img src="{{ selected_book['image'] }}" alt="{{ selected_book['bookTitle'] }}">
+        </div>
+        <div class="col-md-8 book-details">
+            <h3>{{ selected_book['bookTitle'] }}</h3>
+            <p><strong>Author:</strong> {{ selected_book['bookAuthor'] }}</p>
+            <p><strong>Price:</strong> ${{ selected_book['Price'] }}</p>
+            <p><strong>Rating:</strong> {{ '%.2f'|format(selected_book['weighted_rating']) }}</p>
+            <a href="#" class="btn btn-primary">Add to Cart</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Display Recently Rated Books -->
+{% if recently_rated_books %}
+<div class="container mt-4">
+    <h5>Recently Rated Books</h5>
+    <div class="row row-custom">
+        {% for book in recently_rated_books %}
+        <div class="book-card">
+            <div class="card mb-4">
+                <img class="card-img-top book-cover" src="{{ book['image'] }}" alt="{{ book['bookTitle'] }}">
+                <div class="card-body book-body">
+                    <h5 class="card-title">{{ book['bookTitle'] }}</h5>
+                    <p class="card-text">Author: {{ book['bookAuthor'] }}</p>
+                    <p class="card-text">User Rating: {{ book['rating'] }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Display Collaborative Filtering Recommendations -->
+{% if collaborative_recs %}
+<div class="container mt-4">
+    <h5>Books Popular Among Readers Who Share Same Interests </h5>
+    <div class="row row-custom">
+        {% for book in collaborative_recs %}
+        <div class="book-card">
+            <div class="card mb-4">
+                <img class="card-img-top book-cover" src="{{ book['image'] }}" alt="{{ book['bookTitle'] }}">
+                <div class="card-body book-body">
+                    <h5 class="card-title">{{ book['bookTitle'] }}</h5>
+                    <p class="card-text">Author: {{ book['bookAuthor'] }}</p>
+                    <p class="card-text">Rating: {{ '%.2f'|format(book['weighted_rating']) }}</p>
+                    <p class="card-text">Price: ${{ book['Price'] }}</p>
+                    <a href="#" class="btn btn-primary btn-block">Add to Cart</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Display Content-Based Recommendations -->
+{% if content_based_rec %}
+<div class="container mt-4">
+    <h5>Books That Matches With Your Selection</h5>
+    <div class="row row-custom">
+        {% for book in content_based_rec %}
+        <div class="book-card">
+            <div class="card mb-4">
+                <img class="card-img-top book-cover" src="{{ book['image'] }}" alt="{{ book['bookTitle'] }}">
+                <div class="card-body book-body">
+                    <h5 class="card-title">{{ book['bookTitle'] }}</h5>
+                    <p class="card-text">Author: {{ book['bookAuthor'] }}</p>
+                    <p class="card-text">Rating: {{ '%.2f'|format(book['weighted_rating']) }}</p>
+                    <p class="card-text">Price: ${{ book['Price'] }}</p>
+                    <a href="#" class="btn btn-primary btn-block">Add to Cart</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1" role="dialog" aria-labelledby="settingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="settingsModalLabel">Settings</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <h5>Choose Theme:</h5>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="theme" id="defaultTheme" value="default" checked>
+            <label class="form-check-label" for="defaultTheme">
+              Default
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="theme" id="blackTheme" value="black">
+            <label class="form-check-label" for="blackTheme">
+              Black Theme
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="theme" id="greenTheme" value="green">
+            <label class="form-check-label" for="greenTheme">
+              Green Theme
+            </label>
+          </div>
+          <hr>
+          <h5>Zoom:</h5>
+          <button type="button" class="btn btn-primary mr-2" id="zoomIn">Zoom In</button>
+          <button type="button" class="btn btn-primary" id="zoomOut">Zoom Out</button>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="applyTheme">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script>
+    // Handle click on Settings link to open the modal
+    document.getElementById('settingsLink').addEventListener('click', function() {
+      $('#settingsModal').modal('show');
+    });
+  
+    // Handle theme apply button click
+    document.getElementById('applyTheme').addEventListener('click', function() {
+      // Get the selected theme value
+      var selectedTheme = document.querySelector('input[name="theme"]:checked').value;
+  
+      // Apply the selected theme
+      if (selectedTheme === 'black') {
+        document.body.style.backgroundColor = 'black';
+        document.body.style.color = 'white';
+      } else if (selectedTheme === 'green') {
+        document.body.style.backgroundColor = 'green';
+        document.body.style.color = 'white';
+      } else {
+        // Default theme
+        document.body.style.backgroundColor = '#f8f9fa';
+        document.body.style.color = 'black';
+      }
+  
+      // Close the modal
+      $('#settingsModal').modal('hide');
+    });
+  
+    // Handle zoom in button click
+    document.getElementById('zoomIn').addEventListener('click', function() {
+      document.body.style.zoom = "115%";
+    });
+  
+    // Handle zoom out button click
+    document.getElementById('zoomOut').addEventListener('click', function() {
+      document.body.style.zoom = "100%";
+    });
+  </script>
+  
+  
+  <!--footer-->
+  <footer class="footer bg-dark text-white" style="margin-top:300px;">
+      <div class="container" style="padding-top:20px;">
+          <div class="row">
+              <div class="col-md-3 col-sm-6">
+                <h5>Discover Your Next Great Read!</h5>
+                <p>Stay connected with us for personalized book recommendations, reviews, and literary insights. Whether you're into fiction, non-fiction, or the latest bestsellers, we’ve got something for every reader.</p>
+              </div>
+              <div class="col-md-3 col-sm-6">
+                  <h5>Quick Links</h5>
+                  <ul class="list-unstyled">
+                      <li><a href="#">Home</a></li>
+                      <li><a href="#">About</a></li>
+                      <li><a href="#">Services</a></li>
+                      <li><a href="#">Contact</a></li>
+                  </ul>
+              </div>
+              <div class="col-md-3 col-sm-6">
+                  <h5>Support</h5>
+                  <ul class="list-unstyled">
+                      <li><a href="#">FAQ</a></li>
+                      <li><a href="#">Terms of Service</a></li>
+                      <li><a href="#">Privacy Policy</a></li>
+                  </ul>
+              </div>
+              <div class="col-md-3 col-sm-6">
+                  <h5>Contact Us</h5>
+                  <address>
+                      <strong>Company Name</strong><br>
+                      123 Street, City<br>
+                      Country<br>
+                      <i class="fas fa-phone"></i> Phone: +1234567890<br>
+                      <i class="fas fa-envelope"></i> Email: info@example.com
+                  </address>
+              </div>
+          </div>
+          <div class="row mt-3">
+              <div class="col-md-12">
+                  <hr class="bg-light">
+                  <p class="text-center">© 2024 RECO INC. All Rights Reserved.</p>
+              </div>
+          </div>
+      </div>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Ignore dataset folder or specific files
+/models/
+*.csv
+
+# Ignore Python bytecode files
+__pycache__/
+*.py[cod]
