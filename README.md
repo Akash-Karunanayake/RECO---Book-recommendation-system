@@ -19,6 +19,6 @@ This project is a book recommendation system that provides personalized book sug
 2. Best Rated Books: A featured list of top-rated books is displayed on the homepage to guide new users toward popular selections.
 3. User Profile Information: For logged-in users, the system provides an overview of their activity, including the number of books they’ve rated and their five most recent ratings.<br><br>
 ### User interface
-![Recommendations]([https://github.com/IT22577924/RECO---Book-recommendation-system/blob/main/Recommendations.png?raw=true](https://github.com/IT22577924/RECO---Book-recommendation-system/blob/main/recommendations.png))
+![Recommendations](https://github.com/IT22577924/RECO---Book-recommendation-system/blob/main/recommendations.png)
 <br><br>
 #### This project is designed to enhance the reading experience by offering personalized book suggestions and a dynamic user interface to explore highly-rated titles.
