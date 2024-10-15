@@ -36,10 +36,10 @@ def preprocess_text(text):
     text = ' '.join([word for word in text.split() if word not in stop_words])
     return text
 
+# Content-based recommendation function
 def contentBased_recommendations(title, cosine_similarities, df, top_n=10):
     # Preprocess the input title
     input_title = preprocess_text(title)
-
 
     if not input_title:
         print(f"Title '{title}' not found in the dataset.")
@@ -67,15 +67,15 @@ def contentBased_recommendations(title, cosine_similarities, df, top_n=10):
     # Sort the books based on similarity scores
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
 
-   # Keep track of unique book titles
+    # Keep track of unique book titles
     unique_titles = set()
     filtered_sim_scores = []
     for i, score in sim_scores:
-        book_title = df.iloc[i]['Title']
+        book_title = df.iloc[i]['bookTitle']
         if book_title not in unique_titles:
             unique_titles.add(book_title)
             filtered_sim_scores.append((i, score))
-        # Stop if we have enough recommendations
+        # Stop if when have enough recommendations
         if len(filtered_sim_scores) >= top_n:
             break
 
@@ -90,11 +90,10 @@ def contentBased_recommendations(title, cosine_similarities, df, top_n=10):
     # Drop the temporary column
     df.drop('processed_title', axis=1, inplace=True)
 
-    return recommendations
+    # Ensure 'bookID' is included
+    return recommendations[['bookID', 'bookTitle', 'bookAuthor', 'bookCategory', 'Price', 'weighted_rating', 'image', 'score_content']]
 
-
-#Collaboratove algorithm
-
+# Collaborative filtering function
 from surprise import SVD, Dataset, Reader
 
 def collaborative_filtering_recommendations(df, target_user_id, top_n=10):
@@ -124,11 +123,62 @@ def collaborative_filtering_recommendations(df, target_user_id, top_n=10):
 
     # Get book details
     recommendations = df[df['bookID'].isin(top_book_ids)].drop_duplicates('bookID')
-    recommendations = recommendations[['bookID','bookTitle','bookAuthor','bookCategory', 'Price', 'weighted_rating', 'image']].copy()
-    recommendations['score_collaborative'] = scores
+    recommendations = recommendations[['bookID', 'bookTitle', 'bookAuthor', 'bookCategory', 'Price', 'weighted_rating', 'image']].copy()
+    recommendations['score_collaborative'] = recommendations['bookID'].map(dict(zip(top_book_ids, scores)))
 
     return recommendations
 
+def hybrid_recommendations(content_recs, collaborative_recs, df, content_weight=0.5, collaborative_weight=0.5, top_n=10):
+    # Merge recommendations on 'bookID' using an 'outer' join
+    combined_recs = pd.merge(
+        content_recs[['bookID', 'score_content']],
+        collaborative_recs[['bookID', 'score_collaborative']],
+        on='bookID',
+        how='outer'  # Include all books from both recommendations
+    )
+
+    # Fill NaN scores with zeros
+    combined_recs['score_content'] = combined_recs['score_content'].fillna(0)
+    combined_recs['score_collaborative'] = combined_recs['score_collaborative'].fillna(0)
+
+    # Normalize scores
+    if combined_recs['score_content'].max() != 0:
+        combined_recs['score_content_normalized'] = combined_recs['score_content'] / combined_recs['score_content'].max()
+    else:
+        combined_recs['score_content_normalized'] = 0
+
+    if combined_recs['score_collaborative'].max() != 0:
+        combined_recs['score_collaborative_normalized'] = combined_recs['score_collaborative'] / combined_recs['score_collaborative'].max()
+    else:
+        combined_recs['score_collaborative_normalized'] = 0
+
+    # Compute the hybrid score
+    combined_recs['score_hybrid'] = (
+        content_weight * combined_recs['score_content_normalized'] +
+        collaborative_weight * combined_recs['score_collaborative_normalized']
+    )
+
+    # Merge with the main DataFrame to get item attributes
+    combined_recs = pd.merge(
+        combined_recs,
+        df[['bookID', 'bookTitle', 'bookAuthor', 'bookCategory', 'Price', 'weighted_rating', 'image']],
+        on='bookID',
+        how='left'
+    )
+
+    # Remove duplicates
+    combined_recs = combined_recs.drop_duplicates(subset='bookID')
+
+    # Sort and select top_n recommendations
+    combined_recs = combined_recs.sort_values(by='score_hybrid', ascending=False)
+    hybrid_top_n = combined_recs.head(top_n).reset_index(drop=True)
+
+    # Rearrange columns
+    columns_order = ['bookID', 'bookTitle', 'bookAuthor', 'bookCategory', 'Price',
+                     'weighted_rating', 'image', 'score_hybrid']
+    hybrid_top_n = hybrid_top_n[columns_order]
+
+    return hybrid_top_n
 
 # routes========================================================
 
@@ -162,70 +212,101 @@ def recommendations():
     users = df[['userID', 'userName']].drop_duplicates()
 
     if request.method == 'POST':
-        # Update session variables based on form data
-        if 'userName' in request.form:
-            session['userName'] = request.form.get('userName')
-        if 'prod' in request.form:
-            session['prod'] = request.form.get('prod')
-            nbr = request.form.get('nbr')
-            if nbr is None or not nbr.isdigit():
-                nbr = 5
+        action = request.form.get('action')
+        if action == 'select_book':
+            if 'prod' in request.form:
+                session['prod'] = request.form.get('prod')
+                nbr = request.form.get('nbr')
+                if nbr is None or not nbr.isdigit():
+                    nbr = 5
+                else:
+                    nbr = int(nbr)
+                session['nbr'] = nbr
+        elif action == 'select_user':
+            if 'userName' in request.form:
+                session['userName'] = request.form.get('userName')
+        elif action == 'get_recommendations':
+            # Ensure both user and book are selected
+            if 'userName' not in session or 'prod' not in session:
+                message = "Please select both a user and a book before getting recommendations."
             else:
-                nbr = int(nbr)
-            session['nbr'] = nbr
+                # Proceed to generate recommendations
+                pass  # handle this in the next steps
 
-    # Get selections from session
+    # Retrieve selections from session
     user_name = session.get('userName')
     prod = session.get('prod')
-    nbr = session.get('nbr', 5)
+    nbr = int(session.get('nbr', 5))
 
     # Initialize variables
     recently_rated_books = None
-    collaborative_recs = None
-    selected_userName = None
-    content_based_rec = None
-    selected_book = None
-    selected_bookTitle = None
+    hybrid_recs = None
     user_details = None
+    message = None
 
-    # Generate outputs based on selections
-    if user_name:
-        user_ids = df[df['userName'] == user_name]['userID'].unique()
-        user_id = user_ids[0]  # Assuming userName is unique
+    # Set selected_userName and selected_bookTitle based on session variables
+    selected_userName = user_name
+    selected_bookTitle = prod
 
-        selected_userName = user_name
+    # Check if  should generate recommendations
+    if request.method == 'POST' and request.form.get('action') == 'get_recommendations':
+        if user_name and prod:
+            # Both user and product selected, generate hybrid recommendations
+            user_ids = df[df['userName'] == user_name]['userID'].unique()
+            user_id = user_ids[0]  # Assuming userName is unique
 
-        # Get user details
-        user_details = df[df['userID'] == user_id][['userID', 'userName', 'rated_books_count']].drop_duplicates().iloc[0].to_dict()
+            # Get user details
+            user_details = df[df['userID'] == user_id][['userID', 'userName', 'rated_books_count']].drop_duplicates().iloc[0].to_dict()
 
-        # Get recently rated books
-        recently_rated_books = df[df['userID'] == user_id].sort_values(by='timestamp', ascending=False).head(5).to_dict(orient='records')
+            # Get recently rated books
+            recently_rated_books = df[df['userID'] == user_id].sort_values(by='timestamp', ascending=False).head(5).to_dict(orient='records')
 
-        # Get collaborative filtering recommendations
-        collaborative_recs = collaborative_filtering_recommendations(df, user_id, 5).to_dict(orient='records')
+            # Get collaborative filtering recommendations
+            collaborative_df = collaborative_filtering_recommendations(df, user_id, top_n=100)  # Get more items for merging
 
-    if prod:
-        nbr = int(nbr)
-        content_based_df = contentBased_recommendations(prod, cosine_similarities_content, df, top_n=nbr)
-        if not content_based_df.empty:
-            content_based_rec = content_based_df.to_dict(orient='records')
-            selected_book = df[df['bookTitle'] == prod].drop_duplicates('bookID').iloc[0].to_dict()
-            selected_bookTitle = prod
+            # Get content-based recommendations
+            content_based_df = contentBased_recommendations(prod, cosine_similarities_content, df, top_n=100)
+
+            if not content_based_df.empty:
+                # Generate hybrid recommendations
+                hybrid_df = hybrid_recommendations(content_based_df, collaborative_df, df, top_n=nbr)
+                hybrid_recs = hybrid_df.to_dict(orient='records')
+
+                # Get selected book details
+                selected_book = df[df['bookTitle'] == prod].drop_duplicates('bookID').iloc[0].to_dict()
+            else:
+                message = "No hybrid recommendations available for the selected book."
         else:
-            content_based_rec = None
-            selected_book = None
-            selected_bookTitle = None
+            message = "Please select both a user and a book to get hybrid recommendations."
+    else:
+        # Handle displaying selected user and book without generating recommendations
+        if user_name:
+            user_ids = df[df['userName'] == user_name]['userID'].unique()
+            user_id = user_ids[0]  # Assuming userName is unique
+
+            # Get user details
+            user_details = df[df['userID'] == user_id][['userID', 'userName', 'rated_books_count']].drop_duplicates().iloc[0].to_dict()
+
+            # Get recently rated books
+            recently_rated_books = df[df['userID'] == user_id].sort_values(by='timestamp', ascending=False).head(5).to_dict(orient='records')
+
+        if prod:
+            selected_book = df[df['bookTitle'] == prod].drop_duplicates('bookID').iloc[0].to_dict()
+        else:
+            selected_book = None  # Ensure selected_book is None if no book is selected
 
     return render_template('main.html',
                            users=users.to_dict(orient='records'),
                            books=books,
                            selected_userName=selected_userName,
                            recently_rated_books=recently_rated_books,
-                           collaborative_recs=collaborative_recs,
-                           content_based_rec=content_based_rec,
+                           hybrid_recs=hybrid_recs,
                            selected_book=selected_book,
                            selected_bookTitle=selected_bookTitle,
-                           user_details=user_details)
+                           user_details=user_details,
+                           message=message)
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
