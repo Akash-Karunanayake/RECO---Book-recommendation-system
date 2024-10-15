@@ -39,6 +39,11 @@
             flex: 1 1 calc(20% - 20px);
             margin: 10px;
             max-width: calc(20% - 20px);
+            transition: transform 0.2s; /* Animation for hover effect */
+        }
+        .book-card:hover {
+            transform: scale(1.05); /* Scale up on hover */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Add shadow on hover */
         }
 
         .row-custom {
@@ -48,27 +53,35 @@
             margin-right: -10px;
         }
 
+        .book-cover {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+        }
+
         .card-title {
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            display: -webkit-box;
-            -webkit-line-clamp: 2; /* number of lines to show */
-            -webkit-box-orient: vertical;
+        }
+
+        .card-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* Adjusted styles for selected book */
         .selected-book img {
-            max-width: 100%;
-            height: auto;
+            /*max-width: 100%;
+            height: auto;*/
+            height: 250px;
+            object-fit: cover;
         }
         .selected-book .book-details {
             padding-left: 20px;
         }
 
-        .book-cover {
-            height: 250px;
-            object-fit: cover;
-        }
         .book-body {
             display: flex;
             flex-direction: column;
@@ -77,6 +90,22 @@
         .card-body .btn-block {
             margin-top: auto;
         }
+
+        .btn-select-book {
+        background-color: #28a745;
+        border-color: #28a745;
+        color: white;
+       }
+    .btn-select-book:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
+      }
+    /* Adjust spacing between elements */
+    .number-input {
+        margin-left: 10px;
+        margin-right: 10px;
+        width: 150px;
+     }
     </style>
 </head>
 <body>
@@ -100,24 +129,36 @@
     </div>
   </nav>
   
-  
-<!-- Search Bar with Book Dropdown -->
+<!-- Display Message if any -->
+{% if message %}
+<div class="container mt-4">
+    <div class="alert alert-warning">
+        {{ message }}
+    </div>
+</div>
+{% endif %}
+
+<!-- Book Selection Form -->
 <div class="container mt-5">
-    <h4>Select a book for get the similar books</h4>
-    <form action="/recommendations" method="POST" style="display:flex;">
+    <h4>Select a Book</h4>
+    <form action="/recommendations" method="POST" style="display:flex; align-items: center;">
         <select class="form-control mr-2" name="prod">
             {% for book in books %}
                 <option value="{{ book }}" {% if book == selected_bookTitle %}selected{% endif %}>{{ book }}</option>
             {% endfor %}
         </select>
-        <input type="number" class="form-control" name="nbr" placeholder="Number of products..." style="width:100px;">
-        <button class="btn btn-primary">Search</button>
+        <!-- Add margin to the number input -->
+        <input type="number" class="form-control number-input" name="nbr" placeholder="Number of products...">
+        <button class="btn btn-select-book" name="action" value="select_book">
+            <i class="fas fa-book"></i> Select Book
+        </button>
     </form>
 </div>
 
-<!-- User Selection Dropdown -->
+
+<!-- User Selection Form -->
 <div class="container mt-5">
-    <h4>Select User to See Recommendations</h4>
+    <h4>Select a User</h4>
     <form action="/recommendations" method="POST" class="mb-3">
         <div class="form-group">
             <label for="userName">Select User:</label>
@@ -127,9 +168,17 @@
                 {% endfor %}
             </select>
         </div>
-        <button type="submit" class="btn btn-primary">Select User</button>
+        <button type="submit" class="btn btn-primary" name="action" value="select_user">Select User</button>
     </form>
 </div>
+
+<!-- Get Recommendations Button -->
+<div class="container mt-3">
+    <form action="/recommendations" method="POST">
+        <button type="submit" class="btn btn-success" name="action" value="get_recommendations">Get Recommendations</button>
+    </form>
+</div>
+
 
 <!-- Display User Details -->
 {% if user_details %}
@@ -153,7 +202,8 @@
             <h3>{{ selected_book['bookTitle'] }}</h3>
             <p><strong>Author:</strong> {{ selected_book['bookAuthor'] }}</p>
             <p><strong>Price:</strong> ${{ selected_book['Price'] }}</p>
-            <p><strong>Rating:</strong> {{ '%.2f'|format(selected_book['weighted_rating']) }}</p>
+            <p class="card-text">Category: {{ book['bookCategory'] }}</p>
+            <p><strong>Book Rating:</strong> {{ '%.2f'|format(selected_book['weighted_rating']) }}</p>
             <a href="#" class="btn btn-primary">Add to Cart</a>
         </div>
     </div>
@@ -172,7 +222,8 @@
                 <div class="card-body book-body">
                     <h5 class="card-title">{{ book['bookTitle'] }}</h5>
                     <p class="card-text">Author: {{ book['bookAuthor'] }}</p>
-                    <p class="card-text">User Rating: {{ book['rating'] }}</p>
+                    <p class="card-text">Category: {{ book['bookCategory'] }}</p>
+                    <p class="card-text">User's Rating: {{ book['rating'] }}</p>
                 </div>
             </div>
         </div>
@@ -181,41 +232,19 @@
 </div>
 {% endif %}
 
-<!-- Display Collaborative Filtering Recommendations -->
-{% if collaborative_recs %}
+<!-- Display Hybrid Recommendations -->
+{% if hybrid_recs %}
 <div class="container mt-4">
-    <h5>Books Popular Among Readers Who Share Same Interests </h5>
+    <h5>Recommended Books</h5>
     <div class="row row-custom">
-        {% for book in collaborative_recs %}
+        {% for book in hybrid_recs %}
         <div class="book-card">
             <div class="card mb-4">
                 <img class="card-img-top book-cover" src="{{ book['image'] }}" alt="{{ book['bookTitle'] }}">
                 <div class="card-body book-body">
                     <h5 class="card-title">{{ book['bookTitle'] }}</h5>
                     <p class="card-text">Author: {{ book['bookAuthor'] }}</p>
-                    <p class="card-text">Rating: {{ '%.2f'|format(book['weighted_rating']) }}</p>
-                    <p class="card-text">Price: ${{ book['Price'] }}</p>
-                    <a href="#" class="btn btn-primary btn-block">Add to Cart</a>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-<!-- Display Content-Based Recommendations -->
-{% if content_based_rec %}
-<div class="container mt-4">
-    <h5>Books That Matches With Your Selection</h5>
-    <div class="row row-custom">
-        {% for book in content_based_rec %}
-        <div class="book-card">
-            <div class="card mb-4">
-                <img class="card-img-top book-cover" src="{{ book['image'] }}" alt="{{ book['bookTitle'] }}">
-                <div class="card-body book-body">
-                    <h5 class="card-title">{{ book['bookTitle'] }}</h5>
-                    <p class="card-text">Author: {{ book['bookAuthor'] }}</p>
+                    <p class="card-text">Category: {{ book['bookCategory'] }}</p>
                     <p class="card-text">Rating: {{ '%.2f'|format(book['weighted_rating']) }}</p>
                     <p class="card-text">Price: ${{ book['Price'] }}</p>
                     <a href="#" class="btn btn-primary btn-block">Add to Cart</a>
@@ -311,6 +340,7 @@
       document.body.style.zoom = "100%";
     });
   </script>
+
   
   
   <!--footer-->
